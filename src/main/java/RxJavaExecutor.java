@@ -1,4 +1,3 @@
-import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -26,13 +25,15 @@ public class RxJavaExecutor {
 	private SingleScheduler singleScheduler;
 	private ComputationScheduler computationScheduler;
 	private IoScheduler ioScheduler;
+	private IdGenerator idGenerator;
 
 	private Scheduler schedulerFromExecutor;
 
-	private ConcurrentHashMap<Disposable, Disposable> removableDisposableMap = new ConcurrentHashMap<Disposable, Disposable>();
+	private ConcurrentHashMap<Integer, Disposable> removableDisposableMap = new ConcurrentHashMap<Integer, Disposable>();
 
 	public RxJavaExecutor(String name, int numberOfThreads) {
 		logger = LoggerFactory.getLogger(name + "-RxJavaExecutor");
+		idGenerator = new IdGenerator(name);
 		namedThreadFactory = new NamedThreadFactory(name);
 		namedExecutor = new ThreadPoolExecutor(numberOfThreads, numberOfThreads, 0L, TimeUnit.MILLISECONDS,
 				new LinkedBlockingQueue<Runnable>(), namedThreadFactory);
@@ -44,60 +45,59 @@ public class RxJavaExecutor {
 
 	}
 
-	public void scheduleSingle(long delay, String item) {
-		Flowable.timer(delay, TimeUnit.MILLISECONDS, computationScheduler).doOnNext(oN -> testWherePrinted())
-				.observeOn(schedulerFromExecutor).subscribe(i -> logger.info("subscriber thread {}", i));
-	}
-
-	public Disposable scheduleSingleCallable(long delay, Callable<? extends Object> callable) {
+	public Integer scheduleSingleCallable(long delay, Callable<? extends Object> callable) {
 		Disposable disposable = Flowable.timer(delay, TimeUnit.MILLISECONDS, computationScheduler)
 				.map(m -> callable.call()).observeOn(schedulerFromExecutor)
-				.subscribe(onNext -> logger.info("subscriber thread {} ", onNext),
-						error -> logger.error("error {} ", error.getMessage()), () -> {
-							logger.info("Completed");
+				.subscribe(onNext -> logger.info("scheduleSingleCallable subscriber thread {} ", onNext),
+						error -> logger.error("scheduleSingleCallable error {} ", error.getMessage()), () -> {
+							logger.info("scheduleSingleCallable Completed");
 						});
 
-		removableDisposableMap.put(disposable, disposable);
+		Integer id = idGenerator.getNewId();
+		removableDisposableMap.put(id, disposable);
 
-		return disposable;
+		return id;
 
 	}
 
-	public Disposable scheduleSingleRunnable(long delay, Runnable runnable) {
+	public Integer scheduleSingleRunnable(long delay, Runnable runnable) {
 		Disposable disposable = Flowable.timer(delay, TimeUnit.MILLISECONDS, computationScheduler)
 				.doOnNext(m -> runnable.run()).observeOn(schedulerFromExecutor)
-				.subscribe(onNext -> logger.info("subscriber thread {} ", onNext),
-						error -> logger.error("error {} ", error.getMessage()),
+				.subscribe(onNext -> logger.info("scheduleSingleRunnable subscriber thread {} ", onNext),
+						error -> logger.error("scheduleSingleRunnable error {} ", error.getMessage()),
 						() -> {
 							logger.info("scheduleSingleRunnable Completed");
 
 						});
 
-		removableDisposableMap.put(disposable, disposable);
+		  Integer id = idGenerator.getNewId();
+	        removableDisposableMap.put(id, disposable);
 
-		return disposable;
+	        return id;
 	}
 
-	public Disposable scheduleFixedRateRunnable(long delay, long period, Runnable runnable) {
+	public Integer scheduleFixedRateRunnable(long delay, long period, Runnable runnable) {
 		Disposable disposable = Flowable.interval(delay, period, TimeUnit.MILLISECONDS, computationScheduler)
 				.doOnNext(m -> runnable.run()).observeOn(schedulerFromExecutor).subscribe(i -> logger.info("{}", i));
 
-		removableDisposableMap.put(disposable, disposable);
+		Integer id = idGenerator.getNewId();
+        removableDisposableMap.put(id, disposable);
 
-		return disposable;
+        return id;
 	}
 
-	public Disposable scheduleFixedRateCallable(long delay, long period, Callable<? extends Object> callable) {
+	public Integer scheduleFixedRateCallable(long delay, long period, Callable<? extends Object> callable) {
 		Disposable disposable = Flowable.interval(delay, period, TimeUnit.MILLISECONDS, computationScheduler)
 				.map(m -> callable.call()).observeOn(schedulerFromExecutor).subscribe(i -> logger.info("{}", i));
 
-		removableDisposableMap.put(disposable, disposable);
+		Integer id = idGenerator.getNewId();
+        removableDisposableMap.put(id, disposable);
 
-		return disposable;
+        return id;
 	}
 
-	public synchronized boolean cancelScheduledDisposable(Disposable disposable) {
-		Disposable dis = removableDisposableMap.remove(disposable);
+	public synchronized boolean cancelScheduledDisposable(Integer id) {
+		Disposable dis = removableDisposableMap.remove(id);
 
 		if (dis != null) {
 			dis.dispose();
@@ -130,27 +130,27 @@ public class RxJavaExecutor {
 
 	public void testScheduledCallable() {
 		Callable<String> c1 = () -> {
-			logger.info("callable 1");
+			logger.info("callable 1 sleeping");
 			Thread.sleep(2000);
 
-			return "Done sleep for 2 seconds";
+			return "callable 1 done sleep for 2 seconds";
 		};
-		Disposable disposable1 = scheduleFixedRateCallable(0, 3000, c1);
+		Integer disposable1 = scheduleFixedRateCallable(0, 3000, c1);
 		Callable<String> c2 = () -> {
-			logger.info("callable 2");
+			logger.info("callable 2 sleeping");
 			Thread.sleep(2000);
 
-			return "Done sleep for 2 seconds";
+			return "callable 2 done sleep for 2 seconds";
 		};
-		Disposable disposable2 = scheduleFixedRateCallable(1000, 3000, c2);
+		Integer disposable2 = scheduleFixedRateCallable(1000, 3000, c2);
 
 		Callable<Boolean> c3 = () -> {
 			logger.info("callable 3 stopping intervals");
-			logger.info("callable 3 disposable 1: {} 2:{}", disposable1.hashCode(), disposable2.hashCode());
-			disposable1.dispose();
-			disposable2.dispose();
+			logger.info("callable 3 disposable 1 id : {} id 2:{}", disposable1.hashCode(), disposable2.hashCode());
+			cancelScheduledDisposable(disposable1);
+			cancelScheduledDisposable(disposable2);
 
-			return disposable1.isDisposed() && disposable2.isDisposed();
+			return true;
 		};
 		scheduleSingleCallable(10000, c3);
 	}
@@ -161,12 +161,11 @@ public class RxJavaExecutor {
 
 		scheduleFixedRateRunnable(0, 1000, () -> testWherePrinted());
 		scheduleFixedRateRunnable(0, 3000, () -> testWherePrinted());
-		Disposable dis = scheduleSingleRunnable(12000, () -> shutdownExecutor());
+		Integer id = scheduleSingleRunnable(12000, () -> shutdownExecutor());
 
 		scheduleSingleRunnable(11000, () -> {
-			Disposable d = removableDisposableMap.get(dis);
 			logger.info("stopping shutdown disposable");
-			d.dispose();
+			cancelScheduledDisposable(id);
 		});
 	}
 
