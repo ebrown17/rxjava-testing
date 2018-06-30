@@ -46,6 +46,7 @@ public class IdGenerator {
   public void recycleId(Integer id) {
     if(identityInUse.contains(id)) {
       identityInUse.remove(id);
+      identityPool.add(id);
     }
   }
 
