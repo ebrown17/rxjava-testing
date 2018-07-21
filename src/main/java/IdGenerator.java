@@ -7,7 +7,7 @@ public class IdGenerator {
   private ArrayDeque<Integer> identityPool;
   private ArrayList<Integer> identityInUse;
   private static final int INITIAL_POOL_SIZE = 1000;
-  private int lowestUnassingedID = 1;
+  private int lowestUnassignedID = 1;
 
   public IdGenerator(String name) {
     this.name = name;
@@ -17,9 +17,9 @@ public class IdGenerator {
   }
 
   private void initIdentityPool() {
-    while (lowestUnassingedID <= INITIAL_POOL_SIZE) {
-      if (lowestUnassingedID < Integer.MAX_VALUE) {
-        identityPool.add(lowestUnassingedID++);
+    while (lowestUnassignedID <= INITIAL_POOL_SIZE) {
+      if (lowestUnassignedID < Integer.MAX_VALUE) {
+        identityPool.add(lowestUnassignedID++);
       }
     }
   }
@@ -52,8 +52,8 @@ public class IdGenerator {
 
   private void refillIdPool() {
     for (int i = 0; i < INITIAL_POOL_SIZE; i++) {
-      if (lowestUnassingedID < Integer.MAX_VALUE) {
-        identityPool.add(lowestUnassingedID++);
+      if (lowestUnassignedID < Integer.MAX_VALUE) {
+        identityPool.add(lowestUnassignedID++);
       }
       else {
         for (int j = 1; j < Integer.MAX_VALUE; j++) {
@@ -69,7 +69,7 @@ public class IdGenerator {
   @Override
   public String toString() {
     return "Identity [name=" + name + ", identityPool=" + identityPool + ", identityInUse=" + identityInUse
-        + ", lowestUnassingedID=" + lowestUnassingedID + "]";
+        + ", lowestUnassignedID=" + lowestUnassignedID + "]";
   }
 
 }
